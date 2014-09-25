@@ -33,7 +33,7 @@ Version specific details can be accessed through the subpackages.
 
     import (
         "github.com/mikkyang/id3-go/v1"
-        "github.com/mikkyang/id3-go/v2"
+        "github.com/mmorton/id3-go/v2"
     )
 
 # Quick Start
