@@ -4,8 +4,9 @@
 package v2
 
 import (
-	"github.com/mikkyang/id3-go/encodedbytes"
 	"io"
+
+	"github.com/mikkyang/id3-go/encodedbytes"
 )
 
 var (
@@ -118,21 +119,22 @@ var (
 	}
 )
 
-func ParseV23Frame(reader io.Reader) Framer {
+func ParseV23Frame(reader io.Reader) (Framer, uint32) {
 	data := make([]byte, FrameHeaderSize)
 	if n, err := io.ReadFull(reader, data); n < FrameHeaderSize || err != nil {
-		return nil
+		return nil, 0
 	}
 
 	id := string(data[:4])
-	t, ok := V23FrameTypeMap[id]
-	if !ok {
-		return nil
+
+	size, err := encodedbytes.SynchInt(data[4:8])
+	if err != nil {
+		return nil, 0
 	}
 
-	size, err := encodedbytes.NormInt(data[4:8])
-	if err != nil {
-		return nil
+	t, ok := V23FrameTypeMap[id]
+	if !ok {
+		return nil, size
 	}
 
 	h := FrameHead{
@@ -144,10 +146,10 @@ func ParseV23Frame(reader io.Reader) Framer {
 
 	frameData := make([]byte, size)
 	if n, err := io.ReadFull(reader, frameData); n < int(size) || err != nil {
-		return nil
+		return nil, 0
 	}
 
-	return t.constructor(h, frameData)
+	return t.constructor(h, frameData), size
 }
 
 func V23Bytes(f Framer) []byte {

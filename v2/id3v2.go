@@ -5,9 +5,10 @@ package v2
 
 import (
 	"fmt"
-	"github.com/mikkyang/id3-go/encodedbytes"
 	"io"
 	"os"
+
+	"github.com/mikkyang/id3-go/encodedbytes"
 )
 
 const (
@@ -21,7 +22,7 @@ type Tag struct {
 	padding               uint
 	commonMap             map[string]FrameType
 	frameHeaderSize       int
-	frameConstructor      func(io.Reader) Framer
+	frameConstructor      func(io.Reader) (Framer, uint32)
 	frameBytesConstructor func(Framer) []byte
 	dirty                 bool
 }
@@ -69,19 +70,24 @@ func ParseTag(readSeeker io.ReadSeeker) *Tag {
 	t.Header = header
 
 	var frame Framer
+	var frameSize uint32
 	size := int(t.size)
 	for size > 0 {
-		frame = t.frameConstructor(readSeeker)
+		frame, frameSize = t.frameConstructor(readSeeker)
 
-		if frame == nil {
+		if frame != nil {
+			id := frame.Id()
+			t.frames[id] = append(t.frames[id], frame)
+			frame.setOwner(t)
+		} else if frameSize == 0 {
 			break
+		} else {
+			if _, err := readSeeker.Seek(int64(frameSize), os.SEEK_CUR); err != nil {
+				return nil
+			}
 		}
 
-		id := frame.Id()
-		t.frames[id] = append(t.frames[id], frame)
-		frame.setOwner(t)
-
-		size -= t.frameHeaderSize + int(frame.Size())
+		size -= t.frameHeaderSize + int(frameSize)
 	}
 
 	t.padding = uint(size)
