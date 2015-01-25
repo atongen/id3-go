@@ -1,18 +1,20 @@
 package encodedbytes
 
 import (
-	"code.google.com/p/go.text/transform"
+	"bytes"
+	"io/ioutil"
+	"strings"
+
 	"code.google.com/p/go.text/encoding"
 	"code.google.com/p/go.text/encoding/charmap"
 	"code.google.com/p/go.text/encoding/unicode"
-	"bytes"
-	"io/ioutil"
+	"code.google.com/p/go.text/transform"
 )
 
 type (
 	Converter struct {
 		from string
-		to string
+		to   string
 	}
 )
 
@@ -67,12 +69,12 @@ func (c Converter) ConvertString(s string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return string(out.Bytes()), nil
+		return strings.Trim(string(out.Bytes()), "\x00"), nil
 	} else {
-		return string(native), nil
+		return strings.Trim(string(native), "\x00"), nil
 	}
 }
 
 func NewConverter(from string, to string) (*Converter, error) {
-	return &Converter{from:from, to:to}, nil
+	return &Converter{from: from, to: to}, nil
 }

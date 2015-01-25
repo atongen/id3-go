@@ -5,6 +5,7 @@ package v2
 
 import (
 	"io"
+	"os"
 
 	"github.com/hasty/id3-go/encodedbytes"
 )
@@ -92,21 +93,30 @@ var (
 	}
 )
 
-func ParseV22Frame(reader io.Reader) Framer {
+func (tag *Tag) ParseV22Frame(reader io.ReadSeeker) (Framer, uint32) {
 	data := make([]byte, V22FrameHeaderSize)
 	if n, err := io.ReadFull(reader, data); n < V22FrameHeaderSize || err != nil {
-		return nil
+		return nil, 0
 	}
 
 	id := string(data[:3])
-	t, ok := V22FrameTypeMap[id]
-	if !ok {
-		return nil
+	var size uint32
+	var err error
+	if tag.unsynchronization {
+		size, err = encodedbytes.SynchInt(data[3:6])
+	} else {
+		size, err = encodedbytes.NormInt(data[3:6])
+	}
+	if err != nil {
+		return nil, 0
 	}
 
-	size, err := encodedbytes.NormInt(data[3:6])
-	if err != nil {
-		return nil
+	t, ok := V22FrameTypeMap[id]
+	if !ok {
+		if _, err = reader.Seek(int64(size), os.SEEK_CUR); err != nil {
+			return nil, 0
+		}
+		return nil, size
 	}
 
 	h := FrameHead{
@@ -116,10 +126,10 @@ func ParseV22Frame(reader io.Reader) Framer {
 
 	frameData := make([]byte, size)
 	if n, err := io.ReadFull(reader, frameData); n < int(size) || err != nil {
-		return nil
+		return nil, 0
 	}
 
-	return t.constructor(h, frameData)
+	return t.constructor(h, frameData), size
 }
 
 func V22Bytes(f Framer) []byte {

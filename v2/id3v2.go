@@ -22,7 +22,7 @@ type Tag struct {
 	padding               uint
 	commonMap             map[string]FrameType
 	frameHeaderSize       int
-	frameConstructor      func(io.Reader) Framer
+	frameConstructor      func(io.ReadSeeker) (Framer, uint32)
 	frameBytesConstructor func(Framer) []byte
 	dirty                 bool
 }
@@ -40,17 +40,17 @@ func NewTag(version byte) *Tag {
 	switch t.version {
 	case 2:
 		t.commonMap = V22CommonFrame
-		t.frameConstructor = ParseV22Frame
+		t.frameConstructor = t.ParseV22Frame
 		t.frameHeaderSize = V22FrameHeaderSize
 		t.frameBytesConstructor = V22Bytes
 	case 3:
 		t.commonMap = V23CommonFrame
-		t.frameConstructor = ParseV23Frame
+		t.frameConstructor = t.ParseV23Frame
 		t.frameHeaderSize = FrameHeaderSize
 		t.frameBytesConstructor = V23Bytes
 	default:
 		t.commonMap = V23CommonFrame
-		t.frameConstructor = ParseV23Frame
+		t.frameConstructor = t.ParseV23Frame
 		t.frameHeaderSize = FrameHeaderSize
 		t.frameBytesConstructor = V23Bytes
 	}
@@ -70,19 +70,20 @@ func ParseTag(readSeeker io.ReadSeeker) *Tag {
 	t.Header = header
 
 	var frame Framer
+	var frameSize uint32
 	size := int(t.size)
 	for size > 0 {
-		frame = t.frameConstructor(readSeeker)
+		frame, frameSize = t.frameConstructor(readSeeker)
 
-		if frame == nil {
+		if frame != nil {
+			id := frame.Id()
+			t.frames[id] = append(t.frames[id], frame)
+			frame.setOwner(t)
+		} else if frameSize == 0 {
 			break
 		}
 
-		id := frame.Id()
-		t.frames[id] = append(t.frames[id], frame)
-		frame.setOwner(t)
-
-		size -= t.frameHeaderSize + int(frame.Size())
+		size -= t.frameHeaderSize + int(frameSize)
 	}
 
 	t.padding = uint(size)
@@ -94,7 +95,7 @@ func ParseTag(readSeeker io.ReadSeeker) *Tag {
 }
 
 // Real size of the tag
-func (t Tag) RealSize() int {
+func (t *Tag) RealSize() int {
 	size := uint(t.size) - t.padding
 	return int(size)
 }
@@ -111,11 +112,11 @@ func (t *Tag) changeSize(diff int) {
 }
 
 // Modified status of the tag
-func (t Tag) Dirty() bool {
+func (t *Tag) Dirty() bool {
 	return t.dirty
 }
 
-func (t Tag) Bytes() []byte {
+func (t *Tag) Bytes() []byte {
 	data := make([]byte, t.Size())
 
 	index := 0
@@ -132,12 +133,12 @@ func (t Tag) Bytes() []byte {
 }
 
 // The amount of padding in the tag
-func (t Tag) Padding() uint {
+func (t *Tag) Padding() uint {
 	return t.padding
 }
 
 // All frames
-func (t Tag) AllFrames() []Framer {
+func (t *Tag) AllFrames() []Framer {
 	// Most of the time each ID will only have one frame
 	m := len(t.frames)
 	frames := make([]Framer, m)
@@ -159,7 +160,7 @@ func (t Tag) AllFrames() []Framer {
 }
 
 // All frames with specified ID
-func (t Tag) Frames(id string) []Framer {
+func (t *Tag) Frames(id string) []Framer {
 	if frames, ok := t.frames[id]; ok && frames != nil {
 		return frames
 	}
@@ -168,7 +169,7 @@ func (t Tag) Frames(id string) []Framer {
 }
 
 // First frame with specified ID
-func (t Tag) Frame(id string) Framer {
+func (t *Tag) Frame(id string) Framer {
 	if frames := t.Frames(id); len(frames) != 0 {
 		return frames[0]
 	}
@@ -206,27 +207,27 @@ func (t *Tag) AddFrames(frames ...Framer) {
 	}
 }
 
-func (t Tag) Title() string {
+func (t *Tag) Title() string {
 	return t.textFrameText(t.commonMap["Title"])
 }
 
-func (t Tag) Artist() string {
+func (t *Tag) Artist() string {
 	return t.textFrameText(t.commonMap["Artist"])
 }
 
-func (t Tag) Album() string {
+func (t *Tag) Album() string {
 	return t.textFrameText(t.commonMap["Album"])
 }
 
-func (t Tag) Year() string {
+func (t *Tag) Year() string {
 	return t.textFrameText(t.commonMap["Year"])
 }
 
-func (t Tag) Genre() string {
+func (t *Tag) Genre() string {
 	return t.textFrameText(t.commonMap["Genre"])
 }
 
-func (t Tag) Comments() []string {
+func (t *Tag) Comments() []string {
 	frames := t.Frames(t.commonMap["Comments"].Id())
 	if frames == nil {
 		return nil
@@ -270,7 +271,7 @@ func (t *Tag) textFrame(ft FrameType) TextFramer {
 	return nil
 }
 
-func (t Tag) textFrameText(ft FrameType) string {
+func (t *Tag) textFrameText(ft FrameType) string {
 	if frame := t.textFrame(ft); frame != nil {
 		return frame.Text()
 	}
@@ -314,7 +315,6 @@ func ParseHeader(reader io.Reader) *Header {
 		header.extendedHeader = isBitSet(header.flags, 6)
 		header.experimental = isBitSet(header.flags, 5)
 	}
-
 	return header
 }
 
@@ -329,15 +329,15 @@ type Header struct {
 	size              uint32
 }
 
-func (h Header) Version() string {
+func (h *Header) Version() string {
 	return fmt.Sprintf("2.%d.%d", h.version, h.revision)
 }
 
-func (h Header) Size() int {
+func (h *Header) Size() int {
 	return int(h.size)
 }
 
-func (h Header) Bytes() []byte {
+func (h *Header) Bytes() []byte {
 	data := make([]byte, 0, HeaderSize)
 
 	data = append(data, "ID3"...)
