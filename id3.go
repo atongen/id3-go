@@ -5,9 +5,10 @@ package id3
 
 import (
 	"errors"
-	"github.com/mikkyang/id3-go/v1"
-	"github.com/mikkyang/id3-go/v2"
 	"os"
+
+	"github.com/hasty/id3-go/v1"
+	"github.com/hasty/id3-go/v2"
 )
 
 const (
@@ -44,6 +45,29 @@ type File struct {
 	Tagger
 	originalSize int
 	file         *os.File
+}
+
+var ErrInvalidFile = errors.New("invalid file")
+
+// Reads a tagged file
+func Read(name string) (*File, error) {
+	fi, err := os.OpenFile(name, os.O_RDONLY, 0666)
+	if err != nil {
+		return nil, err
+	}
+
+	file := &File{file: fi}
+
+	if v2Tag := v2.ParseTag(fi); v2Tag != nil {
+		file.Tagger = v2Tag
+		file.originalSize = v2Tag.Size()
+	} else if v1Tag := v1.ParseTag(fi); v1Tag != nil {
+		file.Tagger = v1Tag
+	} else {
+		return nil, ErrInvalidFile
+	}
+
+	return file, nil
 }
 
 // Opens a new tagged file

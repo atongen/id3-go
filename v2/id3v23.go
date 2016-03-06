@@ -4,8 +4,10 @@
 package v2
 
 import (
-	"github.com/mikkyang/id3-go/encodedbytes"
 	"io"
+	"os"
+
+	"github.com/hasty/id3-go/encodedbytes"
 )
 
 var (
@@ -118,21 +120,31 @@ var (
 	}
 )
 
-func ParseV23Frame(reader io.Reader) Framer {
+func (tag *Tag) ParseV23Frame(reader io.ReadSeeker) (Framer, uint32) {
 	data := make([]byte, FrameHeaderSize)
 	if n, err := io.ReadFull(reader, data); n < FrameHeaderSize || err != nil {
-		return nil
+		return nil, 0
 	}
 
 	id := string(data[:4])
-	t, ok := V23FrameTypeMap[id]
-	if !ok {
-		return nil
+
+	var size uint32
+	var err error
+	if tag.unsynchronization {
+		size, err = encodedbytes.SynchInt(data[4:8])
+	} else {
+		size, err = encodedbytes.NormInt(data[4:8])
+	}
+	if err != nil {
+		return nil, 0
 	}
 
-	size, err := encodedbytes.NormInt(data[4:8])
-	if err != nil {
-		return nil
+	t, ok := V23FrameTypeMap[id]
+	if !ok {
+		if _, err = reader.Seek(int64(size), os.SEEK_CUR); err != nil {
+			return nil, 0
+		}
+		return nil, size
 	}
 
 	h := FrameHead{
@@ -144,10 +156,10 @@ func ParseV23Frame(reader io.Reader) Framer {
 
 	frameData := make([]byte, size)
 	if n, err := io.ReadFull(reader, frameData); n < int(size) || err != nil {
-		return nil
+		return nil, 0
 	}
 
-	return t.constructor(h, frameData)
+	return t.constructor(h, frameData), size
 }
 
 func V23Bytes(f Framer) []byte {
