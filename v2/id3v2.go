@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/hasty/id3-go/encodedbytes"
+	"github.com/mikkyang/id3-go/encodedbytes"
 )
 
 const (

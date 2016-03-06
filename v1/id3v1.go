@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	v2 "github.com/hasty/id3-go/v2"
+	"github.com/mikkyang/id3-go/v2"
 )
 
 const (

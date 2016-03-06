@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hasty/id3-go/v1"
-	v2 "github.com/hasty/id3-go/v2"
+	"github.com/mikkyang/id3-go/v1"
+	"github.com/mikkyang/id3-go/v2"
 )
 
 const (

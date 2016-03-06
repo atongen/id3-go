@@ -7,8 +7,8 @@ import (
 	"errors"
 	"os"
 
-	"github.com/hasty/id3-go/v1"
-	"github.com/hasty/id3-go/v2"
+	"github.com/mikkyang/id3-go/v1"
+	"github.com/mikkyang/id3-go/v2"
 )
 
 const (
